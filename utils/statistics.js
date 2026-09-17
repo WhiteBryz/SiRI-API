@@ -33,7 +33,7 @@ const buildDailyStatistics = (currentJsonInfo, lecturas) => ({
         lastTimeStamp: currentJsonInfo.timestamp
     },
     humedadAmbiente: {
-        estadistics: calcularEstadisticas(lecturas, "humedadAmbiente"),
+        estadisticas: calcularEstadisticas(lecturas, "humedadAmbiente"),
         actual: currentJsonInfo.humedadAmbiente
     },
     humedadSuelo: {

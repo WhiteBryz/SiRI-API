@@ -1,9 +1,9 @@
-const mqtt = require('mqtt');
+const { getClient } = require('../utils/mqttClient');
 const { saveMessageToFirebase } = require('../controllers/mqttController');
 
 const init = () => {
     try {
-        const client = mqtt.connect(process.env.MQTT_BROKER_URL);
+        const client = getClient();
 
         client.on('connect', () => {
             console.log('Connected to MQTT broker');
