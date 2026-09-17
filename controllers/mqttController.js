@@ -1,16 +1,17 @@
 const { database } = require('../config/firebase');
-const { ref, set, get, update } = require('firebase/database');
+const { ref, set, get } = require('firebase/database');
+const { getDateParts } = require('../utils/dateUtils');
+const { buildDailyStatistics } = require('../utils/statistics');
+const { getClient } = require('../utils/mqttClient');
 
 const saveMessageToFirebase = async (msg) => {
     try {
         const timestamp = Date.now();
         const currentJsonInfo = JSON.parse(msg);
 
-        const year = new Date(timestamp).getFullYear();
-        const month = new Date(timestamp).getMonth() + 1; // Meses en JS son 0-11
-        const day = new Date(timestamp).getDate();
+        const { year, month, day } = getDateParts(timestamp);
         const lecturaPath = `Readings/${year}/${month}/${day}/${timestamp}`;
-        
+
         // Guardar la nueva lectura
         await set(ref(database, lecturaPath), {
             fecha: currentJsonInfo.fecha,
@@ -34,31 +35,7 @@ const saveMessageToFirebase = async (msg) => {
         }
 
         // Calcular estadísticas para cada campo
-        const estadisticas = {
-            lastTimeStamp: {
-                lastTimeStamp: currentJsonInfo.timestamp
-            },
-            humedadAmbiente: {
-                estadistics: calcularEstadisticas(lecturas, "humedadAmbiente"),
-                actual: currentJsonInfo.humedadAmbiente
-            },
-            humedadSuelo: {
-                estadisticas: calcularEstadisticas(lecturas, "humedadSuelo"),
-                actual: currentJsonInfo.humedadSuelo
-            },
-            iluminacion:{
-                estadisticas: calcularEstadisticas(lecturas, "iluminacion"),
-                actual: currentJsonInfo.iluminacion
-            },
-            nivelAgua:{
-                estadisticas: calcularEstadisticas(lecturas, "nivelAgua"),
-                actual: currentJsonInfo.nivelAgua
-            },
-            temperaturaAmbiente:{
-                estadisticas: calcularEstadisticas(lecturas, "temperaturaAmbiente"),
-                actual: currentJsonInfo.temperaturaAmbiente
-            },
-        };
+        const estadisticas = buildDailyStatistics(currentJsonInfo, lecturas);
 
         // Actualizar las estadísticas diarias
         const statsRef = ref(database, `Statistics/daily`);
@@ -70,11 +47,6 @@ const saveMessageToFirebase = async (msg) => {
     }
 };
 
-// Función para actualizar promedios
-function updateAverage(currentAvg = 0, newValue, count = 1) {
-    return (currentAvg * (count - 1) + newValue) / count;
-}
-
 const getMessages = async (req, res) => {
     try {
         const snapshot = await get(ref(database, 'messages'));
@@ -85,15 +57,9 @@ const getMessages = async (req, res) => {
     }
 };
 
-const mqtt = require('mqtt');
-let client;
-
 const publishMessage = (req, res) => {
     const { topic, message } = req.body;
-
-    if (!client) {
-        client = mqtt.connect(process.env.MQTT_BROKER_URL);
-    }
+    const client = getClient();
 
     client.publish(topic, message, (error) => {
         if (error) {
@@ -106,10 +72,7 @@ const publishMessage = (req, res) => {
 
 const subscribeToTopic = (req, res) => {
     const { topic } = req.body;
-
-    if (!client) {
-        client = mqtt.connect(process.env.MQTT_BROKER_URL);
-    }
+    const client = getClient();
 
     client.subscribe(topic, (error) => {
         if (error) {
@@ -119,32 +82,6 @@ const subscribeToTopic = (req, res) => {
         }
     });
 };
-
-const calcularEstadisticas = (lecturas, campo) => {
-    let suma = 0;
-    let min = Infinity;
-    let max = -Infinity;
-
-    lecturas.forEach((lectura) => {
-        const valor = lectura[campo];
-        const timestamp = lectura.timestamp;
-
-        if (valor !== undefined) {
-            suma += valor;
-            if (valor < min) min = valor;
-            if (valor > max) max = valor;
-        }
-    });
-
-    const promedio = Math.round(suma / lecturas.length);
-
-    return {
-        promedio,
-        min,
-        max
-    };
-};
-
 
 module.exports = {
     saveMessageToFirebase,
